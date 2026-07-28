@@ -12,12 +12,50 @@ const path = require("path");
 const connectDB = require("./config/db");
 
 dotenv.config();
-
 connectDB();
 
 const app = express();
 
-app.use(cors());
+const allowedOrigins = [
+  "http://localhost:8080",
+  "http://localhost:5173",
+  "https://alogiclms.netlify.app",
+  "https://alogiclms.duckdns.org"
+];
+
+const corsOptions = {
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, true);
+    }
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
+};
+
+app.use(cors(corsOptions));
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  if (!origin || allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin || "*");
+  }
+
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH,OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(204);
+  }
+
+  next();
+});
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 

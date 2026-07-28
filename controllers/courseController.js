@@ -3,6 +3,14 @@ const fs = require("fs");
 const path = require("path");
 const unzipper = require("unzipper");
 
+const safeParseJSON = (value) => {
+  try {
+    return JSON.parse(value);
+  } catch (error) {
+    return [];
+  }
+};
+
 exports.uploadCourse = async (req, res) => {
   try {
     console.log("BODY:", req.body);
@@ -28,45 +36,87 @@ exports.uploadCourse = async (req, res) => {
       });
     }
 
-    const courseFolderName = Date.now() + "-" + title.replace(/\s+/g, "-");
-    const courseExtractPath = path.join("uploads", "courses", courseFolderName);
+    const courseFolderName =
+      Date.now() + "-" + title.replace(/\s+/g, "-");
+
+    const courseExtractPath = path.join(
+      "uploads",
+      "courses",
+      courseFolderName
+    );
 
     fs.mkdirSync(courseExtractPath, { recursive: true });
 
     await fs
       .createReadStream(scormFile.path)
-      .pipe(unzipper.Extract({ path: courseExtractPath }))
+      .pipe(
+        unzipper.Extract({
+          path: courseExtractPath,
+        })
+      )
       .promise();
 
-    const launchUrl = `/uploads/courses/${courseFolderName}/story.html`;
+    const launchUrl =
+      `/uploads/courses/${courseFolderName}/story.html`;
 
-const course = await Course.create({
-  title,
-  description,
-  thumbnail: thumbnailFile ? thumbnailFile.path.replace(/\\/g, "/") : "",
-  scormFile: scormFile.path.replace(/\\/g, "/"),
-  scormPath: courseExtractPath.replace(/\\/g, "/"),
-  launchUrl,
-  whatYouWillLearn: whatYouWillLearn ? JSON.parse(whatYouWillLearn) : [],
-  skills: skills ? JSON.parse(skills) : [],
-  outcomes: outcomes ? JSON.parse(outcomes) : [],
-  targetAudience: targetAudience ? JSON.parse(targetAudience) : [],
-  curriculum: curriculum ? JSON.parse(curriculum) : [],
-});
+    const course = await Course.create({
+      title,
+      description,
 
-    res.status(201).json({
+      thumbnail: thumbnailFile
+        ? thumbnailFile.path.replace(/\\/g, "/")
+        : "",
+
+      scormFile: scormFile.path.replace(/\\/g, "/"),
+
+      scormPath: courseExtractPath.replace(/\\/g, "/"),
+
+      launchUrl,
+
+      whatYouWillLearn:
+        whatYouWillLearn
+          ? safeParseJSON(whatYouWillLearn)
+          : [],
+
+      skills:
+        skills
+          ? safeParseJSON(skills)
+          : [],
+
+      outcomes:
+        outcomes
+          ? safeParseJSON(outcomes)
+          : [],
+
+      targetAudience:
+        targetAudience
+          ? safeParseJSON(targetAudience)
+          : [],
+
+      curriculum:
+        curriculum
+          ? safeParseJSON(curriculum)
+          : [],
+    });
+
+    return res.status(201).json({
       success: true,
       message: "Course uploaded successfully",
       course,
     });
+
   } catch (error) {
-    res.status(500).json({
+
+    console.error("UPLOAD ERROR:", error);
+
+    return res.status(500).json({
       success: false,
       message: "Course upload failed",
       error: error.message,
     });
   }
 };
+
 
 exports.getCourses = async (req, res) => {
   try {

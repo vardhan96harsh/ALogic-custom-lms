@@ -40,8 +40,8 @@ router.post(
   uploadCourse
 );
 
-router.put(
-  "/:id",
+router.post(
+  "/update/:id",
   authMiddleware,
   upload.fields([
     { name: "thumbnail", maxCount: 1 },
