@@ -3,6 +3,10 @@ const mongoose = require("mongoose");
 const XapiStatement = require("../models/XapiStatement");
 const XapiState = require("../models/XapiState");
 
+const {
+  updateCourseProgressFromStatement,
+} = require("../services/xapiProgressService");
+
 /*
 |--------------------------------------------------------------------------
 | Helpers
@@ -80,9 +84,6 @@ async function saveOneStatement(
   |--------------------------------------------------------------------------
   | Avoid duplicates
   |--------------------------------------------------------------------------
-  |
-  | xAPI PUT requests can send the same statementId.
-  |
   */
 
   if (statementId) {
@@ -96,45 +97,73 @@ async function saveOneStatement(
     }
   }
 
-  return XapiStatement.create({
-    statementId,
+  /*
+  |--------------------------------------------------------------------------
+  | Save Raw xAPI Statement
+  |--------------------------------------------------------------------------
+  */
 
-    guestId,
+  const savedStatement =
+    await XapiStatement.create({
+      statementId,
 
+      guestId,
+
+      courseId,
+
+      registration,
+
+      actor:
+        statement.actor || {},
+
+      verb:
+        statement.verb || {},
+
+      object:
+        statement.object || {},
+
+      result:
+        statement.result || {},
+
+      context:
+        statement.context || {},
+
+      authority:
+        statement.authority || {},
+
+      attachments:
+        statement.attachments || [],
+
+      timestamp:
+        statement.timestamp
+          ? new Date(statement.timestamp)
+          : null,
+
+      storedAt: new Date(),
+
+      rawStatement: statement,
+    });
+
+  /*
+  |--------------------------------------------------------------------------
+  | Update Course Progress
+  |--------------------------------------------------------------------------
+  |
+  | Statement has already been stored above.
+  |
+  | The progress service handles its own errors so progress calculation
+  | should not break normal xAPI statement storage.
+  |
+  */
+
+  await updateCourseProgressFromStatement({
+    statement,
     courseId,
-
+    guestId,
     registration,
-
-    actor:
-      statement.actor || {},
-
-    verb:
-      statement.verb || {},
-
-    object:
-      statement.object || {},
-
-    result:
-      statement.result || {},
-
-    context:
-      statement.context || {},
-
-    authority:
-      statement.authority || {},
-
-    attachments:
-      statement.attachments || [],
-
-    timestamp:
-      statement.timestamp
-        ? new Date(statement.timestamp)
-        : null,
-
-    storedAt: new Date(),
-
-    rawStatement: statement,
   });
+
+  return savedStatement;
 }
 
 /*
@@ -281,12 +310,8 @@ async function saveXapiStatement(
 
     /*
     |--------------------------------------------------------------------------
-    | xAPI style response
+    | xAPI Style Response
     |--------------------------------------------------------------------------
-    |
-    | POST normally returns statement IDs.
-    | PUT normally returns 204.
-    |
     */
 
     if (req.method === "PUT") {
@@ -326,17 +351,6 @@ async function saveXapiStatement(
 /*
 |--------------------------------------------------------------------------
 | GET Activity State
-|--------------------------------------------------------------------------
-|
-| Example:
-|
-| GET
-| /api/xapi/:courseId/activities/state
-| ?stateId=resume
-| &activityId=...
-| &agent=...
-| &registration=...
-|
 |--------------------------------------------------------------------------
 */
 
@@ -414,12 +428,6 @@ async function getActivityState(
         registration,
         guestId,
       });
-
-    /*
-    |--------------------------------------------------------------------------
-    | No saved state yet
-    |--------------------------------------------------------------------------
-    */
 
     if (!state) {
       return res
@@ -644,13 +652,6 @@ async function deleteActivityState(
       guestId,
     };
 
-    /*
-    |--------------------------------------------------------------------------
-    | If stateId exists delete one state,
-    | otherwise delete all states for activity/registration.
-    |--------------------------------------------------------------------------
-    */
-
     if (stateId) {
       filter.stateId = stateId;
     }
@@ -682,39 +683,50 @@ async function deleteActivityState(
 |--------------------------------------------------------------------------
 */
 
-async function getXapiStatement(req, res) {
+async function getXapiStatement(
+  req,
+  res
+) {
   try {
     const { courseId } = req.params;
-    const { statementId } = req.query;
+
+    const {
+      statementId,
+    } = req.query;
 
     if (
       !courseId ||
-      !mongoose.Types.ObjectId.isValid(courseId)
+      !mongoose.Types.ObjectId.isValid(
+        courseId
+      )
     ) {
       return res.status(400).json({
         success: false,
-        message: "Invalid courseId",
+        message:
+          "Invalid courseId",
       });
     }
 
     if (!statementId) {
       return res.status(400).json({
         success: false,
-        message: "statementId is required",
+        message:
+          "statementId is required",
       });
     }
 
-    const statement = await XapiStatement.findOne({
-      courseId,
-      statementId,
-    });
+    const statement =
+      await XapiStatement.findOne({
+        courseId,
+        statementId,
+      });
 
     if (!statement) {
-      return res.status(404).end();
+      return res
+        .status(404)
+        .end();
     }
 
-    // xAPI endpoint should return the original xAPI statement,
-    // not our MongoDB wrapper document.
     return res.status(200).json(
       statement.rawStatement
     );
@@ -726,7 +738,8 @@ async function getXapiStatement(req, res) {
 
     return res.status(500).json({
       success: false,
-      message: "Unable to retrieve xAPI statement",
+      message:
+        "Unable to retrieve xAPI statement",
     });
   }
 }
@@ -737,7 +750,10 @@ async function getXapiStatement(req, res) {
 |--------------------------------------------------------------------------
 */
 
-async function getXapiAbout(req, res) {
+async function getXapiAbout(
+  req,
+  res
+) {
   try {
     return res.status(200).json({
       version: ["1.0.3"],

@@ -9,6 +9,10 @@ const {
   deleteActivityState,
 } = require("../controllers/xapiController");
 
+const {
+  getGuestCourseReport,
+} = require("../controllers/xapiReportController");
+
 const router = express.Router();
 
 router.use((req, res, next) => {
@@ -28,6 +32,11 @@ router.use((req, res, next) => {
 router.get(
   "/about",
   getXapiAbout
+);
+
+router.get(
+  "/reports/:courseId/:guestId",
+  getGuestCourseReport
 );
 
 router.get(
