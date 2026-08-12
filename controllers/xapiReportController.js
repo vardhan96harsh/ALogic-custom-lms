@@ -1,6 +1,8 @@
 const mongoose = require("mongoose");
 
 const XapiStatement = require("../models/XapiStatement");
+const CourseProgress = require("../models/CourseProgress");
+
 
 /*
 |--------------------------------------------------------------------------
@@ -9,10 +11,7 @@ const XapiStatement = require("../models/XapiStatement");
 */
 
 function durationToSeconds(duration) {
-  if (
-    !duration ||
-    typeof duration !== "string"
-  ) {
+  if (!duration || typeof duration !== "string") {
     return 0;
   }
 
@@ -37,6 +36,7 @@ function durationToSeconds(duration) {
   );
 }
 
+
 function getVerbName(statement) {
   return (
     statement?.verb?.display?.["en-US"] ||
@@ -45,6 +45,7 @@ function getVerbName(statement) {
     ""
   );
 }
+
 
 function getActivityName(statement) {
   return (
@@ -55,257 +56,476 @@ function getActivityName(statement) {
   );
 }
 
+
 /*
 |--------------------------------------------------------------------------
-| GET Guest Course Attempt Report
+| GET Guest Course Report
 |--------------------------------------------------------------------------
-|
-| Example:
 |
 | GET
 | /api/xapi/reports/:courseId/:guestId
-| ?registration=...
 |
 |--------------------------------------------------------------------------
 */
 
-async function getGuestCourseReport(
-  req,
-  res
-) {
+async function getGuestCourseReport(req, res) {
+
   try {
+
     const {
       courseId,
       guestId,
     } = req.params;
 
+
     const {
       registration,
     } = req.query;
 
+
+
     if (
-      !mongoose.Types.ObjectId.isValid(
-        courseId
-      )
+      !mongoose.Types.ObjectId.isValid(courseId)
     ) {
+
       return res.status(400).json({
-        success: false,
-        message: "Invalid courseId",
+        success:false,
+        message:"Invalid courseId",
       });
+
     }
+
+
 
     if (!guestId) {
+
       return res.status(400).json({
-        success: false,
-        message: "guestId is required",
+        success:false,
+        message:"guestId is required",
       });
+
     }
 
-    const filter = {
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Fetch Latest Course Progress
+    |--------------------------------------------------------------------------
+    */
+
+    let progressFilter = {
+      guestId,
+      courseId,
+    };
+
+
+    if (registration) {
+
+      progressFilter.registration =
+        registration;
+
+    }
+
+
+
+    const progress =
+      await CourseProgress.findOne(
+        progressFilter
+      )
+      .sort({
+        updatedAt:-1,
+      })
+      .lean();
+
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | Fetch xAPI Statements
+    |--------------------------------------------------------------------------
+    */
+
+
+    let statementFilter = {
       courseId,
       guestId,
     };
 
+
     if (registration) {
-      filter.registration = registration;
+
+      statementFilter.registration =
+        registration;
+
     }
+    else if(progress?.registration){
+
+      statementFilter.registration =
+        progress.registration;
+
+    }
+
+
 
     const statements =
-      await XapiStatement.find(filter)
-        .sort({
-          timestamp: 1,
-          storedAt: 1,
-        })
-        .lean();
+      await XapiStatement.find(
+        statementFilter
+      )
+      .sort({
+        timestamp:1,
+        storedAt:1,
+      })
+      .lean();
 
-    if (statements.length === 0) {
+
+
+    if(statements.length === 0){
+
       return res.status(404).json({
-        success: false,
-        message:
-          "No xAPI statements found",
+
+        success:false,
+
+        message:"No xAPI statements found",
+
       });
+
     }
+
+
 
     let totalDurationSeconds = 0;
 
-    const moduleMap = new Map();
+
+    const moduleMap =
+      new Map();
+
+
 
     const timeline =
       statements.map(
-        (statement) => {
+        (statement)=>{
+
+
           const verb =
             getVerbName(statement);
+
+
 
           const activityName =
             getActivityName(statement);
 
+
+
           const duration =
-            statement?.result?.duration ||
-            "";
+            statement?.result?.duration || "";
+
+
 
           const durationSeconds =
             durationToSeconds(duration);
 
+
+
           totalDurationSeconds +=
             durationSeconds;
 
+
+
           const objectType =
-            statement?.object?.definition
+            statement?.object
+              ?.definition
               ?.type || "";
+
+
 
           const isModule =
             objectType ===
             "http://adlnet.gov/expapi/activities/module";
 
-          if (isModule) {
+
+
+          if(isModule){
+
+
             const moduleId =
               statement?.object?.id ||
               activityName;
 
-            if (!moduleMap.has(moduleId)) {
+
+
+            if(!moduleMap.has(moduleId)){
+
+
               moduleMap.set(
                 moduleId,
                 {
+
                   moduleId,
+
                   moduleName:
                     activityName,
-                  visits: 0,
-                  durationSeconds: 0,
-                  firstActivityAt: null,
-                  lastActivityAt: null,
+
+                  visits:0,
+
+                  durationSeconds:0,
+
+                  firstActivityAt:null,
+
+                  lastActivityAt:null,
+
                 }
               );
+
             }
+
+
 
             const module =
-              moduleMap.get(
-                moduleId
-              );
+              moduleMap.get(moduleId);
 
-            if (
-              verb === "experienced" ||
-              verb === "entered"
-            ) {
-              module.visits += 1;
+
+
+            if(
+              verb==="experienced" ||
+              verb==="entered"
+            ){
+
+              module.visits +=1;
+
             }
+
+
 
             module.durationSeconds +=
               durationSeconds;
+
+
 
             const activityTime =
               statement.timestamp ||
               statement.storedAt;
 
-            if (
-              !module.firstActivityAt
-            ) {
+
+
+            if(!module.firstActivityAt){
+
               module.firstActivityAt =
                 activityTime;
+
             }
+
+
 
             module.lastActivityAt =
               activityTime;
+
+
           }
 
+
+
+
           return {
+
             statementId:
               statement.statementId,
 
+
             verb,
 
+
             verbId:
-              statement?.verb?.id ||
-              "",
+              statement?.verb?.id || "",
+
 
             activityId:
-              statement?.object?.id ||
-              "",
+              statement?.object?.id || "",
+
 
             activityName,
+
 
             activityType:
               objectType,
 
+
             duration,
+
+
             durationSeconds,
+
 
             timestamp:
               statement.timestamp ||
               statement.storedAt,
+
           };
+
+
         }
       );
+
+
 
     const modules =
       Array.from(
         moduleMap.values()
       );
 
-    const registrations =
-      [
-        ...new Set(
-          statements
-            .map(
-              (item) =>
-                item.registration
-            )
-            .filter(Boolean)
-        ),
-      ];
+
+
 
     return res.status(200).json({
-      success: true,
 
-      data: {
+      success:true,
+
+
+      data:{
+
+
         guestId,
+
+
         courseId,
 
+
+
         registration:
+          progress?.registration ||
           registration ||
-          registrations[0] ||
           "",
+
+
+
+        /*
+        |--------------------------------------------------------------------------
+        | Course Progress Data
+        |--------------------------------------------------------------------------
+        */
+
+
+        status:
+          progress?.status ||
+          "in_progress",
+
+
+
+        completed:
+          progress?.completed ||
+          false,
+
+
+
+        completedAt:
+          progress?.completedAt ||
+          null,
+
+
+
+        successStatus:
+          progress?.successStatus ||
+          "unknown",
+
+
+
+        score:
+          progress?.score ||
+          null,
+
+
+
+        completionPercentage:
+          progress?.completed
+            ? 100
+            : 0,
+
+
 
         totalStatements:
           statements.length,
 
+
+
         totalDurationSeconds:
           Number(
-            totalDurationSeconds.toFixed(
-              2
-            )
+            totalDurationSeconds.toFixed(2)
           ),
 
+
+
         modulesVisited:
+          progress?.modulesVisited ||
           modules.length,
 
+
+
         firstActivityAt:
+          progress?.firstActivityAt ||
           timeline[0]?.timestamp ||
           null,
 
+
+
         lastActivityAt:
-          timeline[
-            timeline.length - 1
-          ]?.timestamp || null,
+          progress?.lastActivityAt ||
+          timeline[timeline.length-1]?.timestamp ||
+          null,
+
+
+
+        lastActivityName:
+          progress?.lastActivityName ||
+          "",
+
+
+
+        lastVerb:
+          progress?.lastVerb ||
+          "",
+
+
 
         modules,
 
+
+
         timeline,
+
       },
+
     });
-  } catch (error) {
+
+
+
+  }
+  catch(error){
+
+
     console.error(
       "Get guest xAPI report error:",
       error
     );
 
+
     return res.status(500).json({
-      success: false,
+
+      success:false,
+
       message:
         "Unable to build guest xAPI report",
+
     });
+
+
   }
+
 }
 
+
+
 module.exports = {
+
   getGuestCourseReport,
+
 };
