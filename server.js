@@ -150,6 +150,11 @@ app.use(
   require("./routes/xapiRoutes")
 );
 
+app.use(
+"/api/progress",
+require("./routes/progressRoutes")
+);
+
 /*
 |--------------------------------------------------------------------------
 | Start Server

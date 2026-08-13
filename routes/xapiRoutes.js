@@ -1,5 +1,8 @@
 const express = require("express");
 
+const authMiddleware = require("../middleware/authMiddleware");
+const adminMiddleware = require("../middleware/adminMiddleware");
+
 const {
   saveXapiStatement,
   getXapiStatement,
@@ -11,9 +14,16 @@ const {
 
 const {
   getGuestCourseReport,
+  getAdminCourseReports,
 } = require("../controllers/xapiReportController");
 
 const router = express.Router();
+
+/*
+|--------------------------------------------------------------------------
+| xAPI Headers
+|--------------------------------------------------------------------------
+*/
 
 router.use((req, res, next) => {
   res.setHeader(
@@ -29,15 +39,71 @@ router.use((req, res, next) => {
   next();
 });
 
+/*
+|--------------------------------------------------------------------------
+| xAPI About
+|--------------------------------------------------------------------------
+*/
+
 router.get(
   "/about",
   getXapiAbout
 );
 
+/*
+|--------------------------------------------------------------------------
+| ADMIN COURSE REPORTS
+|--------------------------------------------------------------------------
+|
+| Only logged-in admin users can access this.
+|
+| GET:
+| /api/xapi/admin/reports
+|
+|--------------------------------------------------------------------------
+*/
+
+router.get(
+  "/admin/reports",
+  authMiddleware,
+  adminMiddleware,
+  getAdminCourseReports
+);
+
+/*
+|--------------------------------------------------------------------------
+| ADMIN INDIVIDUAL GUEST REPORT
+|--------------------------------------------------------------------------
+|
+| Only logged-in admin users can access this.
+|
+| GET:
+| /api/xapi/reports/:courseId/:guestId
+|
+|--------------------------------------------------------------------------
+*/
+
 router.get(
   "/reports/:courseId/:guestId",
+  authMiddleware,
+  adminMiddleware,
   getGuestCourseReport
 );
+
+/*
+|--------------------------------------------------------------------------
+| STORYLINE xAPI STATEMENTS
+|--------------------------------------------------------------------------
+|
+| IMPORTANT:
+|
+| DO NOT add authMiddleware/adminMiddleware here.
+|
+| Storyline needs these endpoints to send xAPI statements
+| while the learner is taking the course.
+|
+|--------------------------------------------------------------------------
+*/
 
 router.get(
   "/:courseId/statements",
@@ -53,6 +119,12 @@ router.put(
   "/:courseId/statements",
   saveXapiStatement
 );
+
+/*
+|--------------------------------------------------------------------------
+| xAPI Activity State
+|--------------------------------------------------------------------------
+*/
 
 router.get(
   "/:courseId/activities/state",

@@ -1,7 +1,6 @@
 const Course = require("../models/Course");
 const CourseProgress = require("../models/CourseProgress");
 
-
 /*
 |--------------------------------------------------------------------------
 | Helpers
@@ -9,7 +8,10 @@ const CourseProgress = require("../models/CourseProgress");
 */
 
 function durationToSeconds(duration) {
-  if (!duration || typeof duration !== "string") {
+  if (
+    !duration ||
+    typeof duration !== "string"
+  ) {
     return 0;
   }
 
@@ -34,7 +36,6 @@ function durationToSeconds(duration) {
   );
 }
 
-
 function getVerb(statement) {
   return (
     statement?.verb?.display?.["en-US"] ||
@@ -42,7 +43,6 @@ function getVerb(statement) {
     ""
   ).toLowerCase();
 }
-
 
 function getActivityName(statement) {
   return (
@@ -52,15 +52,12 @@ function getActivityName(statement) {
   );
 }
 
-
 function getActivityType(statement) {
   return (
     statement?.object?.definition?.type ||
     ""
   );
 }
-
-
 
 /*
 |--------------------------------------------------------------------------
@@ -74,9 +71,7 @@ async function updateCourseProgressFromStatement({
   guestId,
   registration,
 }) {
-
   try {
-
     if (
       !statement ||
       !courseId ||
@@ -86,45 +81,32 @@ async function updateCourseProgressFromStatement({
       return null;
     }
 
-
     const course =
       await Course.findById(courseId)
         .select("xapiConfig")
         .lean();
 
-
-
     const verb =
       getVerb(statement);
-
 
     const activityId =
       statement?.object?.id || "";
 
-
     const activityName =
       getActivityName(statement);
 
-
-
     const activityType =
       getActivityType(statement);
-
-
 
     const activityTime =
       statement?.timestamp
         ? new Date(statement.timestamp)
         : new Date();
 
-
-
     const durationSeconds =
       durationToSeconds(
         statement?.result?.duration
       );
-
-
 
     /*
     |--------------------------------------------------------------------------
@@ -139,60 +121,41 @@ async function updateCourseProgressFromStatement({
         registration,
       });
 
-
-
     if (!progress) {
-
       progress =
         await CourseProgress.create({
-
           guestId,
-
           courseId,
-
           registration,
 
-
-          status:
-            "in_progress",
-
+          status: "in_progress",
 
           firstActivityAt:
             activityTime,
 
-
           lastActivityAt:
             activityTime,
-
 
           lastActivityId:
             activityId,
 
-
           lastActivityName:
             activityName,
 
-
           lastVerb:
             verb,
-
 
           completionActivityId:
             course?.xapiConfig
               ?.completionActivityId ||
             "",
 
-
           completionActivityName:
             course?.xapiConfig
               ?.completionActivityName ||
             "",
-
         });
-
     }
-
-
 
     /*
     |--------------------------------------------------------------------------
@@ -200,36 +163,22 @@ async function updateCourseProgressFromStatement({
     |--------------------------------------------------------------------------
     */
 
-
     if (!progress.firstActivityAt) {
-
       progress.firstActivityAt =
         activityTime;
-
     }
-
-
 
     progress.lastActivityAt =
       activityTime;
 
-
-
     progress.lastActivityId =
       activityId;
-
-
 
     progress.lastActivityName =
       activityName;
 
-
-
     progress.lastVerb =
       verb;
-
-
-
 
     /*
     |--------------------------------------------------------------------------
@@ -237,12 +186,9 @@ async function updateCourseProgressFromStatement({
     |--------------------------------------------------------------------------
     */
 
-
     const isModule =
       activityType ===
       "http://adlnet.gov/expapi/activities/module";
-
-
 
     if (
       isModule &&
@@ -251,28 +197,20 @@ async function updateCourseProgressFromStatement({
         verb === "entered"
       )
     ) {
-
-
       if (
         activityId &&
         !progress.visitedModuleIds.includes(
           activityId
         )
       ) {
-
         progress.visitedModuleIds.push(
           activityId
         );
 
-
         progress.modulesVisited =
           progress.visitedModuleIds.length;
-
       }
-
     }
-
-
 
     /*
     |--------------------------------------------------------------------------
@@ -280,16 +218,10 @@ async function updateCourseProgressFromStatement({
     |--------------------------------------------------------------------------
     */
 
-
     if (durationSeconds > 0) {
-
       progress.totalDurationSeconds +=
         durationSeconds;
-
     }
-
-
-
 
     /*
     |--------------------------------------------------------------------------
@@ -297,94 +229,72 @@ async function updateCourseProgressFromStatement({
     |--------------------------------------------------------------------------
     */
 
-
     if (verb === "completed") {
-
       progress.status =
         "completed";
-
 
       progress.completed =
         true;
 
-
-      if (!progress.completedAt) {
-
-        progress.completedAt =
-          activityTime;
-
-      }
-
-    }
-
-
-
-
-    /*
-    |--------------------------------------------------------------------------
-    | Passed
-    |--------------------------------------------------------------------------
-    */
-
-
-    if (verb === "passed") {
-
-      progress.status =
-        "completed";
-
-
-      progress.completed =
-        true;
-
+      /*
+      |--------------------------------------------------------------------------
+      | Option A
+      |--------------------------------------------------------------------------
+      | Completed means passed for this LMS.
+      */
 
       progress.successStatus =
         "passed";
 
-
       if (!progress.completedAt) {
-
         progress.completedAt =
           activityTime;
-
       }
-
     }
-
-
-
 
     /*
     |--------------------------------------------------------------------------
-    | Failed
+    | Native Passed
     |--------------------------------------------------------------------------
     */
 
-
-    if (verb === "failed") {
-
+    if (verb === "passed") {
       progress.status =
         "completed";
-
 
       progress.completed =
         true;
 
+      progress.successStatus =
+        "passed";
+
+      if (!progress.completedAt) {
+        progress.completedAt =
+          activityTime;
+      }
+    }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Native Failed
+    |--------------------------------------------------------------------------
+    */
+
+    if (verb === "failed") {
+      progress.status =
+        "completed";
+
+      progress.completed =
+        true;
 
       progress.successStatus =
         "failed";
 
-
       if (!progress.completedAt) {
-
         progress.completedAt =
           activityTime;
-
       }
-
     }
-
-
-
 
     /*
     |--------------------------------------------------------------------------
@@ -392,88 +302,146 @@ async function updateCourseProgressFromStatement({
     |--------------------------------------------------------------------------
     */
 
-
     const score =
       statement?.result?.score;
 
-
-
     if (score) {
-
-      if (typeof score.raw === "number") {
-        progress.score.raw = score.raw;
+      if (
+        typeof score.raw === "number"
+      ) {
+        progress.score.raw =
+          score.raw;
       }
 
-
-      if (typeof score.min === "number") {
-        progress.score.min = score.min;
+      if (
+        typeof score.min === "number"
+      ) {
+        progress.score.min =
+          score.min;
       }
 
-
-      if (typeof score.max === "number") {
-        progress.score.max = score.max;
+      if (
+        typeof score.max === "number"
+      ) {
+        progress.score.max =
+          score.max;
       }
 
-
-      if (typeof score.scaled === "number") {
-        progress.score.scaled = score.scaled;
+      if (
+        typeof score.scaled ===
+        "number"
+      ) {
+        progress.score.scaled =
+          score.scaled;
       }
-
     }
-
-
-
 
     /*
     |--------------------------------------------------------------------------
-    | Completion Activity Detection
-    |--------------------------------------------------------------------------
-    |
-    | Storyline does not send completed/passed.
-    | It sends final module:
-    |
-    | STEP 1: COMPLETION
-    |
+    | Configured Completion Activity
     |--------------------------------------------------------------------------
     */
 
+    const configuredActivityId =
+      course?.xapiConfig
+        ?.completionActivityId ||
+      "";
 
-    const completionName =
+    const configuredActivityName =
+      (
+        course?.xapiConfig
+          ?.completionActivityName ||
+        ""
+      )
+        .toLowerCase()
+        .trim();
+
+    const configuredVerb =
+      (
+        course?.xapiConfig
+          ?.completionVerb ||
+        "experienced"
+      )
+        .toLowerCase()
+        .trim();
+
+    const currentActivityName =
       activityName
         .toLowerCase()
         .trim();
 
+    const matchesConfiguredId =
+      configuredActivityId &&
+      activityId ===
+        configuredActivityId;
 
+    const matchesConfiguredName =
+      configuredActivityName &&
+      currentActivityName ===
+        configuredActivityName;
+
+    const matchesConfiguredCompletion =
+      verb === configuredVerb &&
+      (
+        matchesConfiguredId ||
+        matchesConfiguredName
+      );
+
+    /*
+    |--------------------------------------------------------------------------
+    | Storyline Fallback Completion Detection
+    |--------------------------------------------------------------------------
+    |
+    | Current Leadership course sends:
+    |
+    | STEP 1: COMPLETION
+    | verb = experienced
+    |
+    |--------------------------------------------------------------------------
+    */
+
+    const isFallbackCompletion =
+      verb === "experienced" &&
+      (
+        currentActivityName.includes(
+          "completion"
+        ) ||
+        currentActivityName.includes(
+          "complete"
+        )
+      );
+
+    /*
+    |--------------------------------------------------------------------------
+    | Option A:
+    | Completion = Passed
+    |--------------------------------------------------------------------------
+    */
 
     if (
-
-      completionName.includes(
-        "completion"
-      )
-
+      matchesConfiguredCompletion ||
+      isFallbackCompletion
     ) {
-
-
       progress.status =
         "completed";
-
 
       progress.completed =
         true;
 
+      progress.successStatus =
+        "passed";
 
       if (!progress.completedAt) {
-
         progress.completedAt =
           activityTime;
-
       }
 
+      progress.completionActivityId =
+        activityId;
 
+      progress.completionActivityName =
+        activityName;
     }
-
-
-
 
     /*
     |--------------------------------------------------------------------------
@@ -481,29 +449,24 @@ async function updateCourseProgressFromStatement({
     |--------------------------------------------------------------------------
     */
 
-
     await progress.save();
 
-
     return progress;
-
-
-  } catch(error) {
-
-
+  } catch (error) {
     console.error(
       "Update xAPI course progress error:",
       error
     );
 
+    /*
+    |--------------------------------------------------------------------------
+    | Never break statement storage because progress update failed
+    |--------------------------------------------------------------------------
+    */
 
     return null;
-
   }
-
 }
-
-
 
 module.exports = {
   updateCourseProgressFromStatement,
